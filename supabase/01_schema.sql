@@ -742,4 +742,9 @@ alter table public.avatar_items add constraint avatar_items_slot_check
 -- 쓸 칸이 없는 수업자료 쪽은 제목 카드로 보여 주려고 수업 모드가 쪽 제목을 차시에 적는다(slide_titles: ["표지", …])
 alter table public.boards add column if not exists ws_now int null;
 alter table public.boards add column if not exists ws_free boolean not null default false;
+-- 선생님이 열어 둔 쪽(2026-11-10): 수업 모드에서 [열어 두기]를 누른 수업자료 쪽. 따라가는 중에도 학생이 이 쪽으로 넘겨 볼 수 있다
+alter table public.boards add column if not exists ws_pins int[] not null default '{}';
 alter table public.lessons add column if not exists slide_titles jsonb null;
+
+-- 학번으로 첫 가입(2026-11-10): 선생님이 연 반은 이 시각까지 학생이 학번(10701)과 직접 정한 코드 6자리로 가입한다. null이면 닫힘
+alter table public.classes add column if not exists signup_until timestamptz null;

@@ -31,6 +31,21 @@ export async function studentLogin(classId, number, code) {
   return unwrap(await need().rpc('student_login', { p_class_id: classId, p_number: number, p_code: code }));
 }
 
+// 학번으로 첫 가입: student_login과 같은 결과 또는 error = 'SIGNUP_CLOSED' | 'CLASS_LOCKED' | 'NO_STUDENT' | 'TAKEN' | 'WEAK' | 'BAD_CODE'
+export async function studentSignup(classId, number, code) {
+  return unwrap(await need().rpc('student_signup', { p_class_id: classId, p_number: number, p_code: code }));
+}
+
+// 가입 열기·닫기(교사). 열면 오늘 밤 12시까지
+export async function setClassSignup(classId, open) {
+  return unwrap(await need().rpc('set_class_signup', { p_class_id: classId, p_open: open }));
+}
+
+// 반마다 가입이 열린 시각(다른 선생님 사이트만 부른다. 원래 서버에는 이 열이 없음)
+export async function listSignup() {
+  return unwrap(await need().from('classes').select('id, signup_until').order('id'));
+}
+
 export async function studentLogout(token) {
   return unwrap(await need().rpc('student_logout', { p_token: token }));
 }
@@ -520,6 +535,7 @@ export async function getCoinStatus(classId = null) {
 /* ---------- 교사: 학습지 AI 채점 (2026-10-24) ---------- */
 
 // { conf: {on, model, batch, wait, url}, state: {calls, day, cooldown_until, last_error, last_ok_at…}, today, waiting, cron, lessons: [{code, title, fields, cached}] }
+
 export async function getAiAdmin() {
   return unwrap(await need().rpc('get_ai_admin'));
 }
@@ -827,7 +843,8 @@ export async function saveWorksheetRules(value) {
 
 /* ---------- 교사: 퀴즈 쇼 ---------- */
 export const QS_BUCKET = 'quizshow';
-export const qsImageUrl = (path) => (path ? `${SUPABASE_URL}/storage/v1/object/public/${QS_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}` : '');
+// 다른 선생님 서버로 나눠 받은 세트의 그림은 원래 서버 전체 주소(https://…)로 들어 있다
+export const qsImageUrl = (path) => (!path ? '' : /^https:\/\//.test(path) ? path : `${SUPABASE_URL}/storage/v1/object/public/${QS_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}`);
 
 // [{ id, title, description, questions, updated_at }] (최근 고친 순)
 export async function listQsSets() {
@@ -852,7 +869,7 @@ export async function saveQsSet(id, fields) {
 // 세트를 지우면 그 세트의 그림도 지운다(다른 세트가 같이 쓰는 그림은 남긴다)
 export async function deleteQsSet(set, keep = []) {
   unwrap(await need().from('qs_sets').delete().eq('id', set.id));
-  const files = qsImages(set.questions).filter((p) => !keep.includes(p));
+  const files = qsImages(set.questions).filter((p) => !keep.includes(p) && !/^https:\/\//.test(p));
   if (files.length) await need().storage.from(QS_BUCKET).remove(files).catch(() => {});
 }
 
@@ -867,7 +884,7 @@ export async function uploadQsImage(blob) {
 }
 
 export async function removeQsImages(paths) {
-  const list = paths.filter(Boolean);
+  const list = paths.filter((p) => p && !/^https:\/\//.test(p));
   if (list.length) await need().storage.from(QS_BUCKET).remove(list).catch(() => {});
 }
 
