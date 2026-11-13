@@ -323,7 +323,6 @@ function openEdit(b) {
   $('edit-title').textContent = `${clsName(b.class_id)}반 보드 수정`;
   editForm.lesson_code.value = b.lesson_code;
   editForm.elements.title.value = b.title;
-  editForm.elements.ws_group.checked = !!b.ws_group;
   const sims = editForm.querySelector('[data-sims]');
   sims.innerHTML = '';
   (b.sim_links?.length ? b.sim_links : [{ name: '', url: '' }]).forEach((s) => addSimRow(sims, s));
@@ -343,7 +342,6 @@ editForm.addEventListener('submit', async (e) => {
       lesson_code,
       title: editForm.elements.title.value.trim(),
       sim_links,
-      ws_group: editForm.elements.ws_group.checked,
     });
     await setLessonSims(lesson_code, sim_links);
     toast(`저장했어요 (시뮬레이션 링크는 ${lesson_code}차시 모든 반에)`, 'ok');
@@ -357,6 +355,7 @@ editForm.addEventListener('submit', async (e) => {
 /* ---------- 명단 ---------- */
 let rosterClass = TEACHER_CLASSES[0];
 
+let codesShown = false; // 프로젝터에 비칠 수 있어 평소엔 가림
 function renderRoster() {
   const counts = new Map(TEACHER_CLASSES.map((n) => [n, 0]));
   for (const s of students) if (s.active) counts.set(s.class_id, (counts.get(s.class_id) || 0) + 1);
@@ -372,12 +371,15 @@ function renderRoster() {
   $('roster-count').textContent = active.length ? `${active.length}명 · 코드 없음 ${missing}명` : '';
   $('issue-missing').disabled = !missing;
   $('issue-all').disabled = !active.length;
+  $('codes-toggle').textContent = codesShown ? '코드 숨기기' : '코드 보기';
+  $('codes-toggle').disabled = !active.some((s) => s.has_code);
 
   $('roster-list').innerHTML = list.length ? list.map((s) => `
     <div class="roster-row${s.active ? '' : ' off'}" data-sid="${s.id}">
       <b class="num">${s.number}번</b>
       ${s.active
         ? `<span class="tag ${s.has_code ? 'tag-today' : 'tag-warn'}">${s.has_code ? '코드 있음' : '코드 없음'}</span>
+           ${s.has_code ? `<span class="roster-code num${s.code ? '' : ' muted'}">${codesShown ? (s.code || '모름') : '••••••'}</span>` : ''}
            <span class="roster-btns">
              <button type="button" class="btn btn-line btn-small" data-reset>코드 다시 발급</button>
              <button type="button" class="btn btn-danger btn-small" data-off>빼기</button>
@@ -545,6 +547,7 @@ async function issue(onlyMissing) {
     btn.disabled = false;
   }
 }
+$('codes-toggle').addEventListener('click', () => { codesShown = !codesShown; renderRoster(); });
 $('issue-missing').addEventListener('click', () => issue(true));
 $('issue-all').addEventListener('click', () => issue(false));
 
@@ -1645,9 +1648,54 @@ async function refresh() {
   cleanupPostPhotos().catch((err) => console.error(err));
 }
 
+/* ---------- 공유 자료실에서 웹 학습지 받기 (2026-11-12) ----------
+   자료실(a11y526.github.io/science-share)의 웹 학습지 [내 포털에 넣기]가 이 화면을 teacher/?ws-in=1#lessons 로 새 창에 연다.
+   여기서 'ws:ready'를 보내면 자료실이 {type:'ws:file', code, name, html}을 보내고, 받으면 'ws:got'으로 답한다.
+   로그인 뒤 [학습지 올리기]와 같은 미리보기 창을 띄운다(선생님이 [저장]을 눌러야 들어간다). 정답이 든 html이라 자료실 주소에서 온 것만 받는다 */
+const SHARE_ORIGINS = ['https://a11y526.github.io'];
+let wsIncoming = null;
+let wsGot = false; // 한 번만 받는다
+let adminReady = false;
+if (new URLSearchParams(location.search).has('ws-in') && window.opener) {
+  const okOrigin = (o) => SHARE_ORIGINS.includes(o) || (location.hostname === 'localhost' && /^http:\/\/localhost(:\d+)?$/.test(o));
+  addEventListener('message', (e) => {
+    if (!okOrigin(e.origin) || e.data?.type !== 'ws:file' || wsGot) return;
+    const { code, name, html } = e.data;
+    if (!/^[0-9]{3}[A-Za-z0-9]*$/.test(String(code || '')) || typeof html !== 'string' || html.length > 8e6) return;
+    wsGot = true;
+    wsIncoming = { code, name: String(name || `${code}.html`).slice(0, 120), html };
+    e.source?.postMessage({ type: 'ws:got' }, e.origin);
+    history.replaceState(null, '', location.pathname + location.hash);
+    if (adminReady) openIncoming();
+  });
+  let n = 0;
+  const ping = setInterval(() => {
+    if (wsGot || ++n > 600 || !window.opener) { clearInterval(ping); return; }
+    try { window.opener.postMessage({ type: 'ws:ready' }, '*'); } catch { clearInterval(ping); }
+  }, 500);
+}
+function openIncoming() {
+  if (!wsIncoming) return;
+  const { code, name, html } = wsIncoming;
+  wsIncoming = null;
+  if (location.hash !== '#lessons') location.hash = 'lessons';
+  let parsed;
+  try {
+    parsed = parseWorksheet(html);
+  } catch (err) {
+    toast(err.message || '학습지를 읽지 못했어요', 'error');
+    return;
+  }
+  sheetDraft = { code, file: { name: `공유 자료실 · ${name}` }, parsed };
+  showSheetPreview();
+  if (!lessonWindows().some((l) => l.code === code)) toast(`${code}차시 창이 아직 없어요. 저장해 두면 그 차시 창을 만들 때 바로 쓰여요`);
+}
+
 renderCreateForm();
 teacherGate($('v-admin'), async () => {
   await refresh();
   await Promise.all([refreshStudents(), refreshPresets(), refreshNicks(), refreshBuys(), refreshPoints(), refreshLessons()]).catch((err) => toast(errMsg(err), 'error'));
   loadPanel(location.hash.slice(1));
+  adminReady = true;
+  openIncoming();
 });

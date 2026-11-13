@@ -1,14 +1,14 @@
 // 수업 모드 (프로젝터): 수업자료 HTML이 화면 가득, G키로 모둠활동 덮개(모둠·게시판·순위 발표·퀴즈 쇼)를 열고 닫는다
 // live.html?c=<반>&l=<차시>
 // 수업자료 iframe은 한 번 만들면 없애거나 다시 불러오지 않는다(보던 쪽과 시뮬레이션 상태가 남게)
-import { TEACHER_CLASSES, GRADE, clsName } from '../config.js';
+import { TEACHER_CLASSES, TEST_CLASS, GRADE, clsName } from '../config.js';
 import { toast, esc, groupName } from '../ui.js';
 import {
   getLesson, listClasses, listBoards, getBoard, setTodayBoard, sendClassRefresh,
   getBoardGroupMembers, listSubmissions, onSubmissionsChange, getWorksheetStats, setWorksheetUpto, resetWorksheetUpto,
   getWsFirst, acceptWsFirst, skipWsFirst, unskipWsFirst, onWsFirstsChange, openWsPage, closeWsPage, unacceptWsFirst, sendWsOpen, setQuizOpen, listQuizGames,
   listPosts, teacherDeletePost, onPostsChange, cleanupPostPhotos, recordLessonTaught, setBoardSlideMax, setBoardSlideNow, setWsFree, setLessonSlideCount, updateBoard,
-  onRemote, sendRemote, watchBoard, getAwayStats,
+  onRemote, sendRemote, watchBoard, getAwayStats, createBoards,
 } from '../db.js';
 import { boardHTML } from '../posts.js';
 import { renderPage, closeSims } from '../worksheet.js';
@@ -814,39 +814,17 @@ const sheetBand = {
     const skipped = st.skipped?.[this.slide] ?? 0;
     const back = !waiting && acc == null && skipped > 0
       ? `<button type="button" class="btn btn-line btn-small press" data-act="back">넘긴 답 되돌리기 <b class="num">${skipped}</b><kbd>B</kbd></button>` : '';
-    // 모둠 학습지: 켜면 모둠 대표가 쓰고 낸 것이 모둠원 모두에게 기록된다
-    const grp = `<button type="button" class="btn ${st.group ? 'btn-primary' : 'btn-line'} btn-small press" data-act="group" aria-pressed="${!!st.group}"${this.grouping ? ' disabled' : ''}>모둠 학습지 ${st.group ? '켬' : '끔'}</button>`;
     // 열어 두기(2026-11-10): 이 쪽은 수업자료가 넘어가도 학생이 넘겨 와서 볼 수 있게. 수업 끝(모두 열림)이면 필요 없음
     const pinned = (board?.ws_pins ?? []).includes(this.slide);
     const pin = here.length && !board?.ws_free && sheetUpto.sent < ALL_PAGES
       ? `<button type="button" class="btn ${pinned ? 'btn-primary' : 'btn-line'} btn-small press" data-act="pin" aria-pressed="${pinned}"${this.pinning ? ' disabled' : ''}>${pinned ? '열어 둠' : '열어 두기'}<kbd>O</kbd></button>` : '';
     const pinList = (board?.ws_pins ?? []).length && !board?.ws_free && sheetUpto.sent < ALL_PAGES
       ? `<span class="ws-band-h num ws-pinlist">열어 둔 쪽 ${[...board.ws_pins].sort((a, b) => a - b).join('·')}</span>` : '';
-    const html = `<span class="ws-band-h">학습지 완료</span><b class="num">${st.done}</b><span class="num">/ ${st.total}</span>${upto ? `<span class="ws-band-h num">· ${upto}</span>` : ''}${pinList}${grp}${pin}${start}${view}${back}${undo}`;
+    const html = `<span class="ws-band-h">학습지 완료</span><b class="num">${st.done}</b><span class="num">/ ${st.total}</span>${upto ? `<span class="ws-band-h num">· ${upto}</span>` : ''}${pinList}${pin}${start}${view}${back}${undo}`;
     if (html !== this.html) band.innerHTML = this.html = html;
     band.classList.toggle('is-all', st.total > 0 && st.done >= st.total);
     band.classList.toggle('has-act', !!(start || view || back || undo));
     liveBar.sync();
-  },
-
-  // [모둠 학습지 켬/끔]: 과학실처럼 모둠마다 기기 하나로 쓸 때 켠다. 학생 기기는 반 새로고침 신호로 바로 바뀜
-  async toggleGroup() {
-    if (!board || this.grouping || !this.st) return;
-    const on = !this.st.group;
-    if (!on && !confirm('모둠 학습지를 끌까요? 이미 함께 기록된 답은 그대로 두고, 이제부터는 각자 기록해요')) return;
-    this.grouping = true;
-    this.render();
-    try {
-      board = await updateBoard(board.id, { ws_group: on });
-      sendClassRefresh(classId);
-      toast(on ? '모둠 학습지 켬' : '모둠 학습지 끔', 'ok');
-    } catch (err) {
-      console.error(err);
-      toast(errMsg(err), 'error');
-    } finally {
-      this.grouping = false;
-      this.refresh();
-    }
   },
 
   // O: 지금 수업자료 쪽을 열어 두기/닫기. 열어 둔 쪽은 수업자료가 넘어가도 학생이 넘겨 와서 볼 수 있다
@@ -956,7 +934,6 @@ const sheetBand = {
 $('ws-band').addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]');
   if (b?.dataset.act === 'toggle') sheetBand.togglePage();
-  if (b?.dataset.act === 'group') sheetBand.toggleGroup();
   if (b?.dataset.act === 'pin') sheetBand.togglePin();
   if (b?.dataset.act === 'undo') sheetBand.undoAccept();
   if (b?.dataset.act === 'review') wsFirst.view(true);
@@ -1499,11 +1476,18 @@ teacherGate($('app'), async () => {
 
   const [lesson, classes, boards] = await Promise.all([getLesson(code), listClasses(), listBoards()]);
   board = boards.find((b) => b.class_id === classId && b.lesson_code === code) ?? null; // 가장 최근 것
+  // test반은 새 차시 보드가 자동으로 안 생기던 반 → 수업 모드를 열 때 없으면 만든다
+  if (!board && classId === TEST_CLASS && lesson?.lesson_src) {
+    try {
+      const like = boards.find((b) => b.lesson_code === code);
+      await createBoards({ lesson_code: code, title: like?.title || code, sim_links: like?.sim_links || [], items: [{ class_id: classId }], setToday: false });
+      board = (await listBoards()).find((b) => b.class_id === classId && b.lesson_code === code) ?? null;
+    } catch (err) { toast(errMsg(err), 'error'); }
+  }
 
   const title = [`${GRADE}학년 ${clsName(classId)}반`, `${code}차시`, lesson?.title || board?.title].filter(Boolean).join(' · ');
   $('cover-title').textContent = title;
   document.title = `${clsName(classId)}반 ${code}차시 수업`;
-
 
   // 진도 관리: 오늘 이 반 수업 줄에 이 차시를 적고 다음 차시를 넘긴다(오늘 이 반 수업이 없으면 그대로)
   recordLessonTaught(classId, code).catch((err) => console.warn('진도 기록', err));

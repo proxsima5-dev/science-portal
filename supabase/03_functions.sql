@@ -365,6 +365,9 @@ declare
   v_check jsonb := '[]'::jsonb;
   v_used  jsonb := '[]'::jsonb;
   v_mk    text;
+  -- 맞음 낱말(2026-11-13 사용자 요청): settings.ws_pass_words = {"722": {"f35": ["반대"]}} — 그 낱말이 들어간 답은 AI 없이 맞음
+  v_pass  jsonb := case when p_lesson is null then '{}'::jsonb
+                   else coalesce((select s.value -> p_lesson from public.settings s where s.key = 'ws_pass_words'), '{}'::jsonb) end;
 begin
   v_on := coalesce((v_conf ->> 'on')::boolean, false);
   v_wait := coalesce((v_conf ->> 'wait')::numeric, 20);
@@ -415,6 +418,10 @@ begin
     v_kind := public._ws_ai_kind(p_lesson, e.k, e.spec);
     if v_kind = 'text' then
       ok := exists (select 1 from jsonb_array_elements_text(e.ans) as z(t) where public._ws_norm(z.t) = public._ws_norm(v));
+    end if;
+    if v_kind is not null and not ok and jsonb_typeof(v_pass -> e.k) = 'array' then
+      ok := exists (select 1 from jsonb_array_elements_text(v_pass -> e.k) as z(t)
+                    where btrim(z.t) <> '' and strpos(replace(v, ' ', ''), replace(z.t, ' ', '')) > 0);
     end if;
     if v_kind is not null and not ok then
       select c.ok into v_hit from public.ws_ai_cache c
@@ -991,7 +998,7 @@ grant execute on function public.unreveal_board(uuid) to authenticated;
 
 -- ---------------------------------------------------------
 -- 코드 발급 (교사)
--- 평문 코드는 이 응답에서만 돌려준다(인쇄용). 저장은 해시만.
+-- 평문 코드는 응답(인쇄용)과 교사만 보는 student_codes에. 로그인 확인은 해시로.
 -- p_only_missing = true면 코드가 없는 학생만.
 -- ---------------------------------------------------------
 create or replace function public.issue_codes(p_class_id int, p_only_missing boolean default false)
@@ -1017,6 +1024,8 @@ begin
   loop
     v_code := public._new_code();
     update public.students set code_hash = crypt(v_code, gen_salt('bf')) where id = r.id;
+    insert into public.student_codes (student_id, code) values (r.id, v_code)
+    on conflict (student_id) do update set code = excluded.code, updated_at = now();
     delete from public.student_sessions where student_id = r.id;
     delete from public.code_attempts where student_key = p_class_id || '-' || r.number;
     v_out := v_out || jsonb_build_array(jsonb_build_object(
@@ -1052,6 +1061,8 @@ begin
 
   v_code := public._new_code();
   update public.students set code_hash = crypt(v_code, gen_salt('bf')) where id = s.id;
+  insert into public.student_codes (student_id, code) values (s.id, v_code)
+  on conflict (student_id) do update set code = excluded.code, updated_at = now();
   delete from public.student_sessions where student_id = s.id;
   delete from public.code_attempts where student_key = s.class_id || '-' || s.number;
 
@@ -2595,7 +2606,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if exists (select 1 from public.students where id = p_sid and number = 0) then
+  if exists (select 1 from public.students where id = p_sid and number = 0 and class_id <> 20) then  -- test반 0번은 줄에 넣음(시험용)
     return;
   end if;
   -- 이미 줄에 있으면(다시 제출) 잠금 없이 끝 (2026-10-27 렉: 다시 제출도 잠금 앞에 줄을 섰음)
@@ -3006,11 +3017,11 @@ begin
     raise exception 'NOT_FOUND';
   end if;
   select count(*)::int into v_done
-  from public.worksheet_answers a join public.students s on s.id = a.student_id and s.number > 0
+  from public.worksheet_answers a join public.students s on s.id = a.student_id and (s.number > 0 or s.class_id = 20)  -- test반은 0번도 셈
   where a.board_id = b.id and a.done_at is not null;
   select count(*)::int into v_total from public.board_groups where board_id = b.id;
   if v_total = 0 then
-    select count(*)::int into v_total from public.students where class_id = b.class_id and active and number > 0;
+    select count(*)::int into v_total from public.students where class_id = b.class_id and active and (number > 0 or class_id = 20);
   end if;
   return jsonb_build_object(
     'has_sheet', exists (select 1 from public.worksheets where lesson_code = b.lesson_code),
@@ -5518,6 +5529,8 @@ begin
   end if;
 
   update public.students set code_hash = crypt(v_code, gen_salt('bf')) where id = s.id;
+  insert into public.student_codes (student_id, code) values (s.id, v_code)
+  on conflict (student_id) do update set code = excluded.code, updated_at = now();
   delete from public.code_attempts where student_key = p_class_id || '-' || p_number;
 
   v_token := encode(gen_random_bytes(32), 'hex');
