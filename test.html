@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="assets/img/icon-32.png" sizes="32x32">
+<link rel="icon" href="assets/img/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/img/icon-180.png">
+<meta name="apple-mobile-web-app-title" content="과학">
 <meta name="robots" content="noindex">
 <title>test반</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -10,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/design.css">
 <link rel="stylesheet" href="assets/css/site.css">
+<link rel="stylesheet" href="assets/css/study.css">
 </head>
 <body>
 <main class="wrap main-wrap" data-test>
@@ -46,6 +51,10 @@
     <div class="guest rise" style="--d:.12s">
       <span class="guest-label">코드 없이 수업 보기</span>
       <nav class="guest-links" id="guest" aria-label="코드 없이 수업 보기"></nav>
+    </div>
+    <div class="guest rise" style="--d:.15s" id="guest-study">
+      <span class="guest-label">기말 정리 · 로그인 없이</span>
+      <nav class="guest-links" aria-label="기말 정리"><a class="guest-link" href="study.html">5단원 힘의 작용</a></nav>
     </div>
     <!-- 다른 선생님 사이트에서만(IS_MAIN이 아닐 때) 보인다 -->
     <div class="first-row rise hidden" style="--d:.18s" id="first-row">
@@ -117,6 +126,11 @@
       <a class="home-item glass glass-live lift rise" style="--d:.18s" href="shop.html">
         <span class="home-ic" aria-hidden="true"><svg class="draw" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16l-1.2 10.2A2 2 0 0 1 16.8 21H7.2a2 2 0 0 1-2-1.8z"/><path d="M8.5 9V7a3.5 3.5 0 0 1 7 0v2"/></svg></span>
         <span class="home-txt"><b>상점</b><span id="go-shop-sub"></span></span>
+        <span class="home-go" aria-hidden="true">›</span>
+      </a>
+      <a class="home-item glass glass-live lift rise home-row" style="--d:.27s" href="study.html" id="go-study">
+        <span class="home-ic" aria-hidden="true"><svg class="draw" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8 8h8M8 12h5"/></svg></span>
+        <span class="home-txt"><b>기말 정리</b><span>5단원 힘의 작용</span></span>
         <span class="home-go" aria-hidden="true">›</span>
       </a>
       <a class="home-item glass glass-live lift rise" style="--d:.30s" href="rank.html">

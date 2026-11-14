@@ -148,6 +148,13 @@ export async function submitWorksheetPage(token, boardId, page, answers) {
   return unwrap(await need().rpc('submit_worksheet_page', { p_token: token, p_board_id: boardId, p_page: page, p_answers: answers }));
 }
 
+// 게임형 쪽 미션 하나 제출(2026-11-14, sim:stage): 그 칸만 저장·채점하고 시도 횟수를 센다
+// { ok: true, correct, checking, tries, first_ok, passed, done, already, xp, coins, level_before, level_after, total_xp }
+// 또는 { ok: false, error: 'NOT_OPEN' | 'NO_FIELD' | 'EMPTY' | 'LOCKED' | 'NO_GROUP' … }
+export async function submitWorksheetStage(token, boardId, page, key, value) {
+  return unwrap(await need().rpc('submit_worksheet_stage', { p_token: token, p_board_id: boardId, p_page: page, p_key: key, p_value: value }));
+}
+
 // 결과: { month: 'YYYY-MM', rows: [{ rank, class_id, nickname, avatar, xp, move }] }
 // 퀴즈 배틀 (그날 모둠끼리, 선생님이 연 보드에서만). 결과: { ok: true, open, board_id, lesson_code, group_no, count(문제 수), xp, coins, avatar,
 //   members: [{ nickname, avatar, me, joined, online }],
@@ -769,6 +776,11 @@ export async function getWorksheetStats(boardId) {
 // accepted면 대기 대신 그 쪽에서 인정한 답
 export async function getWsFirst(boardId, slide, accepted = false) {
   return unwrap(await need().rpc('get_ws_first', { p_board_id: boardId, p_slide: slide, p_accepted: accepted }));
+}
+
+// 게임형 쪽 미션 기록(교사, 수업 모드 V): { game: false } 또는 { game: true, total, stages: [{ name, blind, tried, cleared, s3, s2, s1, firsts: [{ value, n, ok }] }] }
+export async function getWsStages(boardId, slide) {
+  return unwrap(await need().rpc('get_ws_stages', { p_board_id: boardId, p_slide: slide }));
 }
 
 // [인정]: { ok, xp, coins, class_id, already } · { ok: false, error: 'TAKEN' | 'SKIPPED' }
