@@ -1,7 +1,7 @@
 // 입구: 로그인(반·번호·코드) → 왼쪽 내 캐릭터, 오른쪽 수업·마이페이지·이번 달 순위, 아래 우리 반 게시판
 // 로그인은 로그아웃할 때까지 유지된다(login.js). 코드 없이 수업(게시판)만 볼 수도 있다.
 // test.html은 같은 화면을 test반 하나로 쓴다(<main data-test>): 반 고르기·코드 없이 보기 없음
-import { CLASSES, TEST_CLASS, GRADE, IS_MAIN, clsName } from '../config.js';
+import { CLASSES, TEST_CLASS, GRADE, IS_MAIN, OTHER_PORTAL, clsName } from '../config.js';
 import { initUI, toast, prepareDraw, countUp } from '../ui.js';
 import { studentLogin, studentSignup, studentLogout, getMyPage, getClassMaterials, onClassRefresh } from '../db.js';
 import { setTop, refreshTop } from '../topbar.js';
@@ -38,14 +38,24 @@ function savedNum(c) {
   return /^\d{1,2}$/.test(String(raw ?? '')) && n <= 99 ? n : null;
 }
 
+const OTHER = !TEST && OTHER_PORTAL ? OTHER_PORTAL.classes : [];
 function renderClassPick() {
-  $('cls-pick').innerHTML = PICKS.map((n) => `
+  $('cls-pick').innerHTML = OTHER.map((n) => `
+    <button type="button" class="login-cls is-other press" data-other="${n}" aria-label="${n}반 (다른 선생님 사이트로 이동)">
+      <b class="num">${n}</b><span>반</span><i class="cls-go" aria-hidden="true">↗</i>
+    </button>`).join('') + PICKS.map((n) => `
     <button type="button" role="radio" class="login-cls press${n === pickClass ? ' on' : ''}" aria-checked="${n === pickClass}" data-c="${n}">
       <b class="num">${n}</b><span>반</span>
     </button>`).join('');
 }
 
 $('cls-pick').addEventListener('click', (e) => {
+  const o = e.target.closest('[data-other]');
+  if (o) {
+    if (OTHER_PORTAL.url) location.href = OTHER_PORTAL.url;
+    else toast('1~6반 사이트는 준비 중이에요');
+    return;
+  }
   const b = e.target.closest('[data-c]');
   if (!b) return;
   pickClass = Number(b.dataset.c);

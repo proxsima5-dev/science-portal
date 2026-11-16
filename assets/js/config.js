@@ -11,3 +11,6 @@ export const TEACHER_CLASSES = [...CLASSES, TEST_CLASS];
 export const clsName = (n) => (Number(n) === TEST_CLASS ? 'test' : n);
 // 원래 사이트(7~12반)인지. 학번으로 첫 가입·학생 안내는 다른 선생님 사이트에서만 보인다(2026-11-10 사용자 결정)
 export const IS_MAIN = SUPABASE_URL.includes('sxejmhkevefwnpwldczt');
+// 통합 입구: 검색으로 들어오는 원래 사이트 로그인 화면에 다른 선생님 반(1~6반) 버튼도 보이고, 누르면 그 사이트로 간다.
+// url이 비어 있으면 '준비 중' 안내만 한다. 다른 선생님 사이트(IS_MAIN 아님)에는 안 보인다.
+export const OTHER_PORTAL = IS_MAIN ? { classes: [1, 2, 3, 4, 5, 6], url: 'https://proxsima5-dev.github.io/science-portal/' } : null;
